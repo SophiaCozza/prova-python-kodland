@@ -1,20 +1,20 @@
+import random
+
 WIDTH = 800
 HEIGHT = 600
-
 WHITE = (255, 255, 255)
 GRAY = (100, 100, 100)
 DARK_GRAY = (50, 50, 50)
 SKY = (135, 206, 235)
 GREEN = (0, 255, 0)
 RED = (255, 0, 0)
-
 GROUND_Y = 500
 frame_delay = 0.1
 speed = 4
 gravity = 0.5
 jump_strength = -10
 
-# Estados globais
+# Globais
 game_state = "menu"
 sound_on = True
 boss_warning_timer = 0
@@ -38,6 +38,8 @@ sfx_jump = sounds.jump
 sfx_jump.set_volume(0.3)
 sfx_punch = sounds.punch
 sfx_punch.set_volume(0.05)
+sfx_button = sounds.button
+sfx_button.set_volume(0.2)
 
 # Player
 pink_monster = Actor('pink_monster_idle_0')
@@ -54,7 +56,7 @@ pink_monster.health = 20
 pink_monster.scale = 2.5
 PINK_MONSTER_MAX_HEALTH = 20
 
-score = 0  # Pontuação do jogador
+score = 0  # Score do jogador
 
 zombies = []
 boss = None
@@ -68,7 +70,7 @@ animations = {
     "jump": [f"pink_monster_jump_0", f"pink_monster_jump_1"],
     "attack": [f"pink_monster_attack1_{i}" for i in range(4)],
     "zombie": [f"zombie_{i}" for i in range(3)],
-    "boss": [f"zombie_{i}" for i in range(3)]
+    "boss": [f"boss_{i}" for i in range(3)]
 }
 
 def spawn_zombie():
@@ -84,14 +86,14 @@ def spawn_zombie():
 
 def spawn_boss():
     global boss
-    boss = Actor('zombie_0')
+    boss = Actor('boss_0')
     boss.x = WIDTH + 100
     boss.y = GROUND_Y
     boss.vx = -0.5
     boss.frame_index = 0
     boss.frame_timer = 0
     boss.health = 20
-    boss.scale = 4
+    boss.scale = 7
     boss.flip_x = True
 
 def draw():
@@ -106,12 +108,17 @@ def draw():
         draw_victory()
 
 def draw_menu():
-    screen.fill(GRAY)
-    screen.draw.text("Aventuras de PinkMonster", center=(WIDTH // 2, 100), fontsize=60, color=WHITE)
+    # Fundo igual ao do jogo (ceu, sol, nuvens)
+    screen.fill(SKY)
+    screen.draw.filled_rect(Rect((WIDTH-100, 30), (60, 60)), (255, 255, 0))  # Sol
+    for cloud in clouds:
+        screen.draw.filled_rect(Rect((cloud["x"], cloud["y"]), (80, 30)), (255, 255, 255))
+    # Titulo e botoes
+    draw_text_outline("Aventuras de PinkMonster", (WIDTH // 2, 100), 60, WHITE, center=True)
     for name, rect in buttons.items():
         screen.draw.filled_rect(rect, DARK_GRAY)
         label = "Som: ON" if name == "Som:" and sound_on else name if name != "Som:" else "Som: OFF"
-        screen.draw.text(label, center=rect.center, fontsize=36, color=WHITE)
+        draw_text_outline(label, rect.center, 36, WHITE, center=True)
 
 def draw_end_game():
     screen.fill((30, 30, 30))
@@ -121,11 +128,16 @@ def draw_end_game():
         screen.draw.text(name, center=rect.center, fontsize=36, color=WHITE)
 
 def draw_victory():
-    screen.fill((30, 30, 30))
-    screen.draw.text("Parabens, voce ganhou!", center=(WIDTH // 2, 100), fontsize=60, color=GREEN)
+    # Fundo igual ao do jogo (ceu, sol, nuvens)
+    screen.fill(SKY)
+    screen.draw.filled_rect(Rect((WIDTH-100, 30), (60, 60)), (255, 255, 0))  # Sol
+    for cloud in clouds:
+        screen.draw.filled_rect(Rect((cloud["x"], cloud["y"]), (80, 30)), (255, 255, 255))
+    # Texto e botao
+    draw_text_outline("Parabens, voce ganhou!", (WIDTH // 2, 100), 60, GREEN, center=True)
     rect = Rect((300, 300), (200, 50))
     screen.draw.filled_rect(rect, DARK_GRAY)
-    screen.draw.text("Voltar ao menu", center=rect.center, fontsize=36, color=WHITE)
+    draw_text_outline("Voltar ao menu", rect.center, 36, WHITE, center=True)
 
 def draw_health_bar(actor, max_health):
     # Barra de HP do Pink Monster e do Boss (maior para identificar o boss)
@@ -140,7 +152,11 @@ def draw_health_bar(actor, max_health):
     health_ratio = actor.health / max_health
     x = actor.x - bar_width // 2
     y = actor.y - actor.height // 2 - 20
+    # Borda preta
+    screen.draw.rect(Rect((x-1, y-1), (bar_width+2, bar_height+2)), (0,0,0))
+    # Barra vermelha (fundo)
     screen.draw.filled_rect(Rect((x, y), (bar_width, bar_height)), RED)
+    # Barra verde (vida)
     screen.draw.filled_rect(Rect((x, y), (bar_width * health_ratio, bar_height)), GREEN)
 
 def draw_game():
@@ -152,9 +168,9 @@ def draw_game():
     for cloud in clouds:
         screen.draw.filled_rect(Rect((cloud["x"], cloud["y"]), (80, 30)), (255, 255, 255))
 
-    # Instruções e score
-    screen.draw.text("Pressione Q para atacar!", topleft=(10, 10), fontsize=32, color=WHITE)
-    screen.draw.text(f"Score: {score}", topleft=(10, 50), fontsize=32, color=WHITE)
+    # Controles e score
+    draw_text_outline("Controles: Atacar - Q | Movimentar: Setinhas.", (10, 10), 32, WHITE)
+    draw_text_outline(f"Score: {score}", (10, 50), 32, WHITE)
 
     pink_monster.flip_x = pink_monster.direction == -1
     pink_monster.draw()
@@ -167,16 +183,38 @@ def draw_game():
 
     if boss:
         boss.flip_x = True
+        boss.x = int(boss.x)
+        boss.y = int(boss.y)
         boss.draw()
         draw_health_bar(boss, 20)
 
+    # Texto de aviso do chefe
     if boss_warning_timer > 0:
-        screen.draw.text("O Chefe esta vindo!", center=(WIDTH // 5, 50), fontsize=48, color=RED)
+        import math, time
+        t = time.time()
+        pulse = 1 + 0.15 * math.sin(t * 4)
+        font_size = int(48 * pulse)
+        draw_text_outline("O Chefe esta vindo!", (WIDTH // 2, 80), font_size, RED, center=True)
+
+# Função util para desenhar texto com outline preto (obrigada copilot :) )
+def draw_text_outline(text, pos, fontsize, color, center=False):
+    offsets = [(-2,0),(2,0),(0,-2),(0,2),(-2,-2),(2,-2),(-2,2),(2,2)]
+    for dx, dy in offsets:
+        if center:
+            screen.draw.text(text, center=(pos[0]+dx, pos[1]+dy), fontsize=fontsize, color=(0,0,0))
+        else:
+            screen.draw.text(text, topleft=(pos[0]+dx, pos[1]+dy), fontsize=fontsize, color=(0,0,0))
+    if center:
+        screen.draw.text(text, center=pos, fontsize=fontsize, color=color)
+    else:
+        screen.draw.text(text, topleft=pos, fontsize=fontsize, color=color)
 
 def on_mouse_down(pos):
     global game_state, sound_on, score, boss, boss_spawned, boss_warning_timer
     if game_state == "menu":
         if buttons["Jogar"].collidepoint(pos):
+            if sound_on:
+                sfx_button.play()
             game_state = "jogo"
             pink_monster.health = PINK_MONSTER_MAX_HEALTH
             pink_monster.x = 100
@@ -187,15 +225,21 @@ def on_mouse_down(pos):
             score = 0  # Reinicia a pontuação
             music.play('bg_music')
         elif buttons["Som:"].collidepoint(pos):
+            if sound_on:
+                sfx_button.play()
             sound_on = not sound_on
             if sound_on:
                 music.unpause()
             else:
                 music.pause()
         elif buttons["Sair do jogo"].collidepoint(pos):
+            if sound_on:
+                sfx_button.play()
             quit()
     elif game_state == "fim":
         if end_buttons["Continuar"].collidepoint(pos):
+            if sound_on:
+                sfx_button.play()
             # Reinicia o jogo completamente
             game_state = "menu"
             pink_monster.health = PINK_MONSTER_MAX_HEALTH
@@ -209,16 +253,20 @@ def on_mouse_down(pos):
             pink_monster.frame_index = 0
             pink_monster.frame_timer = 0
             zombies.clear()
-            score = 0  # Reinicia a pontuação
+            score = 0
             boss = None
             boss_spawned = False
             boss_warning_timer = 0
-            music.play('bg_music')  # Recomeça a música
+            music.play('bg_music')
         elif end_buttons["Sair do jogo"].collidepoint(pos):
+            if sound_on:
+                sfx_button.play()
             quit()
     elif game_state == "vitoria":
         rect = Rect((300, 300), (200, 50))
         if rect.collidepoint(pos):
+            if sound_on:
+                sfx_button.play()
             game_state = "menu"
             score = 0
             pink_monster.health = PINK_MONSTER_MAX_HEALTH
@@ -250,7 +298,6 @@ def update():
         update_boss()
         update_spawn()
         check_collisions()
-        # Atualiza nuvens
         for cloud in clouds:
             cloud["x"] += cloud["speed"]
             if cloud["x"] > WIDTH + 40:
@@ -349,10 +396,9 @@ def check_collisions():
             # Score aumenta quando mata um zumbi
             if zombie.health <= 0:
                 score += 1
-                if score >= 100:
+                if score >= 50:
                     game_state = "vitoria"
                     music.stop()
-        # Zumbi só ataca se cooldown passou e estiver colidindo
         elif pink_monster.colliderect(zombie):
             if not hasattr(zombie, 'last_attack_time'):
                 zombie.last_attack_time = 0
@@ -374,7 +420,6 @@ def check_collisions():
         game_state = "fim"
         music.stop()
 
-import random
 
 clouds = [
     {"x": random.randint(0, WIDTH), "y": random.randint(30, 120), "speed": random.uniform(0.3, 0.7)}
